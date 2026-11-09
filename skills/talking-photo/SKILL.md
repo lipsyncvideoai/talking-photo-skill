@@ -1,0 +1,17 @@
+---
+name: talking-photo
+description: Create a lip-synced talking photo video from an image and audio using Lipsync; use for talking photos, 图片对口型, 照片说话, or querying an existing task.
+license: Apache-2.0
+---
+
+# Talking photo with Lipsync
+
+Create an image-and-audio lip-sync video using Lipsync V4. Ask for a missing image or audio; accept local files or HTTPS URLs on product-controlled media hosts. Accept audio in MP3 or WAV format and images in JPG, JPEG, PNG or WebP format. Audio may be at most 40 seconds. If an input has another format, ask for a supported file or get the user’s agreement before converting it. For URLs, apply these media format requirements to the content, not just the URL suffix. Task creation can consume credits. This API does not accept video, subtitles, TTS, or a mode parameter.
+
+1. Read `LIPSYNC_API_KEY` from the agent environment. If it is absent, guide the user to create an API key on the [Lipsync subscription page](https://lipsync.video/subscription) and configure that variable securely in the agent environment; do not ask them to paste it into chat. Use the default origin in [API.md](API.md), unless the user explicitly supplies another deployment origin through `LIPSYNC_API_BASE_URL`.
+2. Read [API.md](API.md). Prefer `scripts/lipsync_v4.py` with Python 3.8+. Supply `--image-file` / `--audio-file` for local files, or `--image-url` / `--audio-url` for supported URLs; mixed input is supported. For local files, obtain upload URLs together and PUT both files before creating the task. Do not send the API key to storage or expose signed URLs.
+3. Use `--create-only` to create once and capture the returned task ID and actual `cost_credit` immediately. Do not automatically retry an uncertain create: it may have succeeded and a retry may charge again. If no task ID was returned, explain that the outcome is unknown and ask the user to check existing jobs before retrying.
+4. Unless the user requests submission only, poll the existing task every 10 seconds for up to 30 minutes or the user's deadline. Use `--task-id ID` or another HTTPS client, and retry transient query failures within the deadline. Do not start a new task to retry a query. On success provide the task ID, status and video URL. On failure provide the public error. At the deadline provide the task ID and last known status; do not call processing a failure.
+5. If the API key is invalid, direct the user to check or regenerate it; explain insufficient credits for HTTP 402. Respect `Retry-After` for 429. Distinguish API upload URL errors from storage PUT errors. For a 403, investigate the client, proxy and access controls; the PowerShell and curl procedure in [upload and polling examples](references/upload-and-polling.md) is an alternative. A failed PUT must stop task creation. Never print the key or signed URLs.
+
+Use [upload and polling examples](references/upload-and-polling.md) for local-file upload and manual polling examples, and [API.md](API.md) for the exact API contract. Report server-provided costs rather than calculating them.
