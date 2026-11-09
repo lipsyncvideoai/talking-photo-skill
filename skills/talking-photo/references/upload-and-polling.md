@@ -4,7 +4,7 @@ For installation and general usage, see the repository README. Configure `LIPSYN
 
 ## Local-file upload and task creation (PowerShell)
 
-The bundled client handles local files. When a different HTTP client is needed, the following example obtains both upload URLs in one request, uploads the bytes and creates the task. It requires `curl.exe`. Set the two local paths and `LIPSYNC_API_KEY` in the environment first. Use the configured origin or the default origin; do not print signed URLs, which grant temporary upload access. The signed URL is passed to curl as an argument and may be visible to other processes on the same host. Never send the API key to the storage URL.
+Use a non-Python HTTP client for the complete API workflow. On Windows, the following PowerShell and curl example obtains both upload URLs in one request, uploads the bytes and creates the task. On other systems, use curl or another non-Python HTTPS client with the same headers and request bodies. This approach has succeeded in testing; it does not establish the cause of earlier 403 responses. It requires `curl.exe`. Set the two local paths and `LIPSYNC_API_KEY` in the environment first. Use the configured origin or the default origin; do not print signed URLs, which grant temporary upload access. The signed URL is passed to curl as an argument and may be visible to other processes on the same host. Never send the API key to the storage URL.
 
 ```powershell
 $origin = if ($env:LIPSYNC_API_BASE_URL) { $env:LIPSYNC_API_BASE_URL.TrimEnd('/') } else { 'https://lipsync.video' }
@@ -14,25 +14,25 @@ if (-not $env:LIPSYNC_API_KEY) { throw 'Set LIPSYNC_API_KEY securely first' }
 foreach ($path in @($imagePath, $audioPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Local file not found' }
 }
-$headers = @{ 'L-api-key' = $env:LIPSYNC_API_KEY }
+$headers = @{ 'L-api-key' = $env:LIPSYNC_API_KEY; 'User-Agent' = 'Lipsync-Talking-Photo/1.0'; 'Accept' = 'application/json' }
 $files = @(
     @{ type = 'image'; file_name = [IO.Path]::GetFileName($imagePath) },
     @{ type = 'audio'; file_name = [IO.Path]::GetFileName($audioPath) }
 )
 $uploadBody = @{ files = $files } | ConvertTo-Json -Depth 4 -Compress
-$uploads = Invoke-RestMethod -Method Post -Uri "$origin/api/v1/lipsync/uploads" -Headers $headers -ContentType 'application/json' -Body $uploadBody
+$uploads = Invoke-RestMethod -Method Post -Uri "$origin/api/v1/lipsync/uploads" -Headers $headers -ContentType 'application/json' -Body ([System.Text.Encoding]::UTF8.GetBytes($uploadBody))
 $urls = @{}
 foreach ($kind in @('image', 'audio')) {
     $items = @($uploads.files | Where-Object { $_.type -eq $kind })
     if ($items.Count -ne 1 -or -not $items[0].upload_url -or -not $items[0].file_url) { throw 'Invalid upload response' }
     $path = if ($kind -eq 'image') { $imagePath } else { $audioPath }
-    & curl.exe --disable --silent --fail --upload-file $path --output NUL -- $items[0].upload_url
+    & curl.exe --disable --silent --fail --user-agent 'Lipsync-Talking-Photo/1.0' --upload-file $path --output NUL -- $items[0].upload_url
     if ($LASTEXITCODE -ne 0) { throw "Storage upload failed for $kind; do not create the task" }
     $urls[$kind] = $items[0].file_url
 }
 $body = @{ image_url = $urls.image; audio_url = $urls.audio } | ConvertTo-Json -Compress
 # If this request times out, check existing tasks before retrying to avoid a duplicate charge.
-$created = Invoke-RestMethod -Method Post -Uri "$origin/api/v1/lipsync/tasks" -Headers $headers -ContentType 'application/json' -Body $body
+$created = Invoke-RestMethod -Method Post -Uri "$origin/api/v1/lipsync/tasks" -Headers $headers -ContentType 'application/json' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 $taskId = $created.task_id
 Write-Output "task_id=$taskId status=$($created.status) cost_credit=$($created.cost_credit)"
 ```
@@ -47,9 +47,9 @@ Set `LIPSYNC_API_KEY` securely in the host environment first. Use the default or
 
 ```powershell
 $origin = if ($env:LIPSYNC_API_BASE_URL) { $env:LIPSYNC_API_BASE_URL.TrimEnd('/') } else { 'https://lipsync.video' }
-$headers = @{ 'L-api-key' = $env:LIPSYNC_API_KEY }
+$headers = @{ 'L-api-key' = $env:LIPSYNC_API_KEY; 'User-Agent' = 'Lipsync-Talking-Photo/1.0'; 'Accept' = 'application/json' }
 $body = @{ image_url = '<public-image-https-url>'; audio_url = '<public-audio-https-url>' } | ConvertTo-Json -Compress
-$created = Invoke-RestMethod -Method Post -Uri "$origin/api/v1/lipsync/tasks" -Headers $headers -ContentType 'application/json' -Body $body
+$created = Invoke-RestMethod -Method Post -Uri "$origin/api/v1/lipsync/tasks" -Headers $headers -ContentType 'application/json' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 $taskId = $created.task_id
 Write-Output "task_id=$taskId status=$($created.status) cost_credit=$($created.cost_credit)"
 
@@ -59,7 +59,7 @@ while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 10
     if ((Get-Date) -ge $deadline) { break }
     try {
-        $result = Invoke-RestMethod -Uri "$origin/api/v1/lipsync/tasks/$taskId" -Headers @{ 'L-api-key' = $env:LIPSYNC_API_KEY }
+        $result = Invoke-RestMethod -Uri "$origin/api/v1/lipsync/tasks/$taskId" -Headers $headers
         $lastStatus = $result.status
         if ($lastStatus -in @('succeeded', 'failed')) { $result | ConvertTo-Json -Compress; break }
     } catch {
@@ -72,6 +72,6 @@ while ((Get-Date) -lt $deadline) {
 if ($lastStatus -notin @('succeeded', 'failed')) { Write-Output "task_id=$taskId last_known_status=$lastStatus; query again later" }
 ```
 
-For another check later, use `python scripts/lipsync_v4.py --task-id TASK_ID` or the GET request above. The bundled Python client polls every 3 seconds, not every 10 seconds. An HTTP 403 from one client should be diagnosed rather than assumed to be an API outage; use an appropriate HTTPS client without exposing the key. Check existing tasks before retrying an uncertain create request to avoid duplicate charges.
+For another check later, use the non-Python GET request above with the existing task ID. An HTTP 403 from one client should be diagnosed rather than assumed to be an API outage; use an appropriate HTTPS client without exposing the key. Check existing tasks before retrying an uncertain create request to avoid duplicate charges.
 
 See [API.md](../API.md) for the versioned contract.

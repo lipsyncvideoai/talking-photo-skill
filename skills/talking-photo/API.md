@@ -1,6 +1,6 @@
 # Lipsync v4 open API
 
-Base origin: `https://lipsync.video` (configure the actual deployment origin with `LIPSYNC_API_BASE_URL`). All requests use HTTPS. The public task endpoints authenticate **only** with `L-api-key: <raw key>`; they do not use `Authorization: Bearer`. A missing, invalid, or revoked key returns HTTP 401. Never log or print the raw key. Product API Key management is separate and uses product login JWT Bearer, not `L-api-key`.
+Base origin: `https://lipsync.video` (configure the actual deployment origin with `LIPSYNC_API_BASE_URL`). All requests use HTTPS. Set `Content-Type: application/json` for API requests with JSON bodies, including upload URL and task creation requests. Send raw file bytes to signed storage PUT URLs according to their signing requirements; do not add the JSON content type to these uploads. The public task endpoints authenticate **only** with `L-api-key: <raw key>`; they do not use `Authorization: Bearer`. A missing, invalid, or revoked key returns HTTP 401. Never log or print the raw key. Product API Key management is separate and uses product login JWT Bearer, not `L-api-key`.
 
 ## Create
 
