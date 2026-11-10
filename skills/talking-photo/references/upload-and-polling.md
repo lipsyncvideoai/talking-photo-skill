@@ -1,20 +1,20 @@
 # Upload and polling examples
 
-For installation and general usage, see the repository README. Configure `LIPSYNC_API_KEY` in the agent environment before calling the API.
+For installation and general usage, see the repository README. On Windows, save the key with `scripts/api-key.ps1 -Action Save` and read it from the encrypted skill-local file.
 
 ## Local-file upload and task creation (PowerShell)
 
-Use a non-Python HTTP client for the complete API workflow. On Windows, the following PowerShell and curl example obtains both upload URLs in one request, uploads the bytes and creates the task. On other systems, use curl or another non-Python HTTPS client with the same headers and request bodies. This approach has succeeded in testing; it does not establish the cause of earlier 403 responses. It requires `curl.exe`. Set the two local paths and `LIPSYNC_API_KEY` in the environment first. Use the configured origin or the default origin; do not print signed URLs, which grant temporary upload access. The signed URL is passed to curl as an argument and may be visible to other processes on the same host. Never send the API key to the storage URL.
+Use a non-Python HTTP client for the complete API workflow. On Windows, the following PowerShell and curl example obtains both upload URLs in one request, uploads the bytes and creates the task. On other systems, use curl or another non-Python HTTPS client with the same headers and request bodies. It requires `curl.exe`. Run the example from the skill directory and set the two local paths. The key reader prefers `LIPSYNC_API_KEY`, then the encrypted file. Use the configured origin or the default origin; do not print signed URLs, which grant temporary upload access. Never send the API key to the storage URL.
 
 ```powershell
 $origin = if ($env:LIPSYNC_API_BASE_URL) { $env:LIPSYNC_API_BASE_URL.TrimEnd('/') } else { 'https://lipsync.video' }
 $imagePath = '<local-image-path>'
 $audioPath = '<local-audio-path>'
-if (-not $env:LIPSYNC_API_KEY) { throw 'Set LIPSYNC_API_KEY securely first' }
+$apiKey = & .\scripts\api-key.ps1 -Action Read
 foreach ($path in @($imagePath, $audioPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Local file not found' }
 }
-$headers = @{ 'L-api-key' = $env:LIPSYNC_API_KEY; 'User-Agent' = 'Lipsync-Talking-Photo/1.0'; 'Accept' = 'application/json' }
+$headers = @{ 'L-api-key' = $apiKey; 'User-Agent' = 'Lipsync-Talking-Photo/1.0'; 'Accept' = 'application/json' }
 $files = @(
     @{ type = 'image'; file_name = [IO.Path]::GetFileName($imagePath) },
     @{ type = 'audio'; file_name = [IO.Path]::GetFileName($audioPath) }
@@ -43,11 +43,12 @@ If the create outcome is uncertain, check existing tasks before retrying because
 
 ## Manual create and poll (PowerShell)
 
-Set `LIPSYNC_API_KEY` securely in the host environment first. Use the default origin from API.md or an explicitly configured `LIPSYNC_API_BASE_URL`; do not change the origin merely to work around an error. Supply the user's public HTTPS URLs below. If the create request times out, check existing tasks before retrying because a retry may create and charge for a duplicate. Creating a task can consume credits.
+Run this example from the skill directory. The key reader prefers `LIPSYNC_API_KEY`, then the encrypted file. Use the default origin from API.md or an explicitly configured `LIPSYNC_API_BASE_URL`; do not change the origin merely to work around an error. Supply the user's public HTTPS URLs below. If the create request times out, check existing tasks before retrying because a retry may create and charge for a duplicate. Creating a task can consume credits.
 
 ```powershell
 $origin = if ($env:LIPSYNC_API_BASE_URL) { $env:LIPSYNC_API_BASE_URL.TrimEnd('/') } else { 'https://lipsync.video' }
-$headers = @{ 'L-api-key' = $env:LIPSYNC_API_KEY; 'User-Agent' = 'Lipsync-Talking-Photo/1.0'; 'Accept' = 'application/json' }
+$apiKey = & .\scripts\api-key.ps1 -Action Read
+$headers = @{ 'L-api-key' = $apiKey; 'User-Agent' = 'Lipsync-Talking-Photo/1.0'; 'Accept' = 'application/json' }
 $body = @{ image_url = '<public-image-https-url>'; audio_url = '<public-audio-https-url>' } | ConvertTo-Json -Compress
 $created = Invoke-RestMethod -Method Post -Uri "$origin/api/v1/lipsync/tasks" -Headers $headers -ContentType 'application/json' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 $taskId = $created.task_id

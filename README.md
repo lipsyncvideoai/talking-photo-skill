@@ -15,8 +15,8 @@ Select the agent(s) in the installer. Use `--global` for user-wide installation,
 ## Set up / 配置
 
 1. Create an API key on the [Lipsync subscription page](https://lipsync.video/subscription).
-2. Set `LIPSYNC_API_KEY` securely in the environment where the agent runs. Never commit the key or paste it into chat. Restart the agent if it inherited its environment before the variable was set.
-3. The bundled client requires Python 3.8+ and HTTPS access to the API and upload storage. The default API origin is documented in [API.md](skills/talking-photo/API.md). Set `LIPSYNC_API_BASE_URL` only when using an explicitly selected deployment.
+2. On Windows, run the command below from `skills/talking-photo` to save the key in an encrypted file in that skill directory. Never commit the file or paste the key into chat. The file is protected by Windows DPAPI for the current user and machine; repeat setup after moving the skill to another machine or user account. On macOS/Linux, use the environment variable below.
+3. The bundled client requires Python 3.9+ and HTTPS access to the API and upload storage. The default API origin is documented in [API.md](skills/talking-photo/API.md). Set `LIPSYNC_API_BASE_URL` only when using an explicitly selected deployment.
 
 macOS/Linux (current shell):
 
@@ -25,18 +25,17 @@ read -rs -p 'Lipsync API key: ' LIPSYNC_API_KEY; echo
 export LIPSYNC_API_KEY
 ```
 
-Windows PowerShell (current shell, hidden input):
+Windows PowerShell (from `skills/talking-photo`, hidden input):
 
 ```powershell
-$key = Read-Host 'Lipsync API key' -AsSecureString
-$env:LIPSYNC_API_KEY = [System.Net.NetworkCredential]::new('', $key).Password
+.\scripts\api-key.ps1 -Action Save
 ```
 
-Configure the environment where the agent actually runs; a shell variable does not automatically propagate to an already running agent or a remote runtime. Persistent configuration is available through your platform's secure environment settings.
+The Windows examples in [upload and polling](skills/talking-photo/references/upload-and-polling.md) assume the current directory is `skills/talking-photo`. Keep the encrypted file private: someone running as your Windows user can decrypt it.
 
 ## Use with an agent / 使用
 
-Provide one JPG/JPEG, PNG or WebP image and one MP3 or WAV audio file (up to 40 seconds), or supported HTTPS URLs for those formats. For example:
+Upload one JPG/JPEG, PNG or WebP image and one MP3 or WAV audio file (up to 40 seconds), or provide supported HTTPS URLs for those formats. The agent must not automatically create a task to test the workflow. If it decides a live test is needed, it first reminds you that generation consumes credits and asks you to provide exactly one image and one audio file for that test. It does not generate sample media or pick unrelated files. For example:
 
 > Use the talking-photo skill to turn `portrait.jpg` and `speech.mp3` into a talking photo. Wait for the result.
 

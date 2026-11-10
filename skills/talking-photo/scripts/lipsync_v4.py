@@ -5,6 +5,7 @@ import ipaddress
 import json
 import os
 import socket
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -18,6 +19,25 @@ class APIError(Exception):
         self.status = status
         self.code = code
         super().__init__(message)
+
+
+def load_api_key():
+    """Read the encrypted skill-local key without putting it on a command line."""
+    key = os.getenv("LIPSYNC_API_KEY")
+    if key:
+        return key
+    if os.name != "nt":
+        raise ValueError("Set LIPSYNC_API_KEY in the host environment")
+    script = Path(__file__).with_name("api-key.ps1")
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(script), "-Action", "Read"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
+        check=False,
+    )
+    key = result.stdout.strip()
+    if result.returncode or not key:
+        raise ValueError("Cannot read encrypted API key; save it with scripts/api-key.ps1")
+    return key
 
 
 def public_https_url(value):
@@ -187,7 +207,7 @@ def main(argv=None):
             "provide one URL or file for each of image and audio, or --task-id"
         )
     try:
-        api = LipsyncClient(os.getenv("LIPSYNC_API_KEY"), args.base_url)
+        api = LipsyncClient(load_api_key(), args.base_url)
         if args.task_id:
             result = api.get(args.task_id)
         else:
